@@ -31,7 +31,7 @@ app.post('/create-order', async (req, res) => {
       notify: { sms: false, email: false },
       reminder_enable: false,
       notes: { slot },
-      expire_by: Math.floor(Date.now() / 1000) + 300,
+      expire_by: Math.floor(Date.now() / 1000) + 1200, // 20 min (Razorpay requires 15 min minimum)
     });
 
     const orderId = link.id;
@@ -92,7 +92,7 @@ app.get('/check-status', (req, res) => {
     return res.status(404).json({ status: 'not_found' });
   }
 
-  if (order.status === 'pending' && Date.now() - order.createdAt > 5 * 60 * 1000) {
+  if (order.status === 'pending' && Date.now() - order.createdAt > 20 * 60 * 1000) {
     order.status = 'expired';
   }
 
