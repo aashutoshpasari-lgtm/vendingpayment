@@ -101,5 +101,27 @@ app.get('/check-status', (req, res) => {
   res.json({ status: order.status, slot: order.slot, amount: order.amount });
 });
 
+// ---------------------------------------------------------------------------
+// TEMPORARY: POST /mock-pay
+// Simulates a successful payment without touching Razorpay at all. Use this
+// to test the full flow (create-order -> mock-pay -> check-status) while
+// waiting on Razorpay account activation.
+//
+// IMPORTANT: DELETE THIS ROUTE before you ever go live with real payments —
+// right now anyone who knows an orderId could "pay" for free by hitting this.
+// ---------------------------------------------------------------------------
+app.post('/mock-pay', (req, res) => {
+  const { order_id } = req.body;
+  const order = orders[order_id];
+
+  if (!order) {
+    return res.status(404).json({ error: 'order not found' });
+  }
+
+  order.status = 'paid';
+  console.log(`[MOCK] Order for slot ${order.slot} marked PAID (order: ${order_id})`);
+  res.json({ status: 'ok', order });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Vending payment server running on port ${PORT}`));
