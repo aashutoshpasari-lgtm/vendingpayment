@@ -1,4 +1,5 @@
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
@@ -10,12 +11,20 @@ app.use(express.json({
   verify: (req, res, buf) => { req.rawBody = buf; }
 }));
 
+// Serves the customer-facing touchscreen page (public/index.html) at "/"
+app.use(express.static(path.join(__dirname, 'public')));
+
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
 const orders = {};
+
+// Queue of { slot, orderId } for orders that just got marked paid and are
+// waiting for the ESP32 to dispense them. Decoupled from *who* created the
+// order (webpage, button, serial) — anything that pays gets queued here.
+const pendingDispense = [];
 
 app.post('/create-order', async (req, res) => {
   try {
@@ -95,10 +104,22 @@ app.post('/webhook', (req, res) => {
     if (order && order.status === 'pending') {
       order.status = 'paid';
       console.log(`Order for slot ${order.slot} marked PAID (link: ${linkId})`);
+      pendingDispense.push({ slot: order.slot, orderId: linkId });
     }
   }
 
   res.json({ status: 'ok' });
+});
+
+// ---------------------------------------------------------------------------
+// GET /pending-dispense
+// The ESP32 polls this on a timer. Returns any newly-paid orders waiting to
+// be dispensed, then clears the queue (drain-on-read — assumes one machine
+// consuming it). Each entry is { slot, orderId }.
+// ---------------------------------------------------------------------------
+app.get('/pending-dispense', (req, res) => {
+  const items = pendingDispense.splice(0, pendingDispense.length); // drain the queue
+  res.json({ items });
 });
 
 app.get('/check-status', (req, res) => {
@@ -114,28 +135,6 @@ app.get('/check-status', (req, res) => {
   }
 
   res.json({ status: order.status, slot: order.slot, amount: order.amount });
-});
-
-// ---------------------------------------------------------------------------
-// TEMPORARY: POST /mock-pay
-// Simulates a successful payment without touching Razorpay at all. Use this
-// to test the full flow (create-order -> mock-pay -> check-status) while
-// waiting on Razorpay account activation.
-//
-// IMPORTANT: DELETE THIS ROUTE before you ever go live with real payments —
-// right now anyone who knows an orderId could "pay" for free by hitting this.
-// ---------------------------------------------------------------------------
-app.post('/mock-pay', (req, res) => {
-  const { order_id } = req.body;
-  const order = orders[order_id];
-
-  if (!order) {
-    return res.status(404).json({ error: 'order not found' });
-  }
-
-  order.status = 'paid';
-  console.log(`[MOCK] Order for slot ${order.slot} marked PAID (order: ${order_id})`);
-  res.json({ status: 'ok', order });
 });
 
 const PORT = process.env.PORT || 3000;
