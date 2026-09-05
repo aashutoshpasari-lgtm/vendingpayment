@@ -32,8 +32,23 @@ app.post('/create-order', async (req, res) => {
       reminder_enable: false,
       notes: { slot },
       expire_by: Math.floor(Date.now() / 1000) + 1200, // 20 min (Razorpay requires 15 min minimum)
-      // NOTE: once UPI is activated on the account, re-add the "options.checkout.config.display.hide"
-      // block here (see project history) to restrict checkout to UPI only.
+      options: {
+        checkout: {
+          config: {
+            display: {
+              hide: [
+                { method: 'card' },
+                { method: 'netbanking' },
+                { method: 'wallet' },
+                { method: 'emi' },
+                { method: 'paylater' },
+                { method: 'cardless_emi' },
+                { method: 'app' },
+              ],
+            },
+          },
+        },
+      },
     });
 
     const orderId = link.id;
